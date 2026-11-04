@@ -396,6 +396,51 @@
             to { transform: rotate(360deg); }
         }
 
+        /* 圖片載入失敗提示與重試按鈕 */
+        .load-error-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(14, 17, 24, 0.92);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 16px;
+            text-align: center;
+            z-index: 7;
+        }
+
+        .load-error-text {
+            font-size: 0.85rem;
+            color: #f87171;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+        }
+
+        .load-error-sub {
+            font-size: 0.72rem;
+            color: var(--text-dim);
+            word-break: break-all;
+        }
+
+        .retry-load-btn {
+            margin-top: 4px;
+            padding: 5px 16px;
+            border-radius: 16px;
+            border: 1px solid var(--accent-gold);
+            background: rgba(212, 175, 55, 0.14);
+            color: var(--accent-gold-light);
+            font-size: 0.76rem;
+            cursor: pointer;
+            transition: var(--transition-smooth);
+        }
+
+        .retry-load-btn:hover {
+            background: var(--accent-gold);
+            color: #0b0d11;
+        }
+
         /* 懸浮賞析標籤徽章 */
         .view-badge {
             position: absolute;
@@ -974,9 +1019,16 @@
                     </div>
 
                     <!-- 骨架屏載入動畫 -->
-                    <div class="skeleton-loader" :class="{ hide: renderedMap[img._id] }">
+                    <div class="skeleton-loader" :class="{ hide: renderedMap[img._id] || failedMap[img._id] }">
                         <div class="skeleton-spinner"></div>
                         <span class="skeleton-text">藝廊載入中...</span>
+                    </div>
+
+                    <!-- 圖片載入失敗提示（支援點擊單張重試） -->
+                    <div v-if="failedMap[img._id]" class="load-error-overlay" @click.stop="retryLoadImage(img)">
+                        <span class="load-error-text">圖片暫時無法載入</span>
+                        <span class="load-error-sub">{{ img.url }}</span>
+                        <button type="button" class="retry-load-btn">點擊重試</button>
                     </div>
 
                     <!-- 畫作渲染 Canvas -->
@@ -1037,8 +1089,17 @@
 
             <!-- 燈箱畫布主體 -->
             <div class="modal-body">
-                <canvas id="modalCanvas" class="modal-canvas"></canvas>
-                <div class="modal-shield"></div>
+                <div v-if="modalLoading" class="skeleton-loader" style="position: relative; width: 320px; height: 240px; border-radius: 8px;">
+                    <div class="skeleton-spinner"></div>
+                    <span class="skeleton-text">高解析度大圖載入中...</span>
+                </div>
+                <canvas v-show="!modalLoading && !modalError" id="modalCanvas" class="modal-canvas"></canvas>
+                <div v-if="modalError" class="load-error-overlay" style="position: relative; width: 320px; height: 220px; border-radius: 8px; border: 1px solid var(--border-subtle);" @click.stop="retryModalImage">
+                    <span class="load-error-text">無法載入大圖</span>
+                    <span class="load-error-sub">{{ currentModalItem.url }}</span>
+                    <button type="button" class="retry-load-btn">點擊重試</button>
+                </div>
+                <div v-show="!modalError" class="modal-shield"></div>
             </div>
 
             <!-- 燈箱作品說明 -->
@@ -1077,8 +1138,16 @@
                     viewMode: 'grid', // 'grid' | 'large'
                     loadError: false,
                     renderedMap: {}, // 紀錄已繪製完成的 Canvas ID
-                    imageCache: {}, // 記憶體圖片快取，確保分類切換時秒速重繪
+                    failedMap: {}, // 紀錄載入失敗的畫作 ID
+                    imageCache: {}, // 記憶體圖片快取，確保分類切換與燈箱開啟時秒速重繪
+                    loadingPromises: {}, // 紀錄載入中的 Promise，避免重複發送請求
+                    activeLoads: 0,
+                    maxConcurrentLoads: 4, // 限制併發圖片請求數，避免行動網路或伺服器壅塞掉圖
+                    loadQueue: [],
                     modalIndex: -1,
+                    modalLoading: false,
+                    modalError: false,
+                    modalRenderToken: 0,
                     toastVisible: false,
                     toastTimer: null,
                     showBackToTop: false,
@@ -1163,7 +1232,9 @@
                 // === 讀取 Excel 檔案 ===
                 async loadExcel() {
                     try {
-                        const response = await fetch("images.xlsx?v=" + this.version, { cache: "no-store" });
+                        const isHttp = window.location.protocol === 'http:' || window.location.protocol === 'https:';
+                        const excelUrl = isHttp ? ("images.xlsx?v=" + this.version) : "images.xlsx";
+                        const response = await fetch(excelUrl, { cache: "no-store" });
                         if (!response.ok) {
                             throw new Error("無法取得 images.xlsx，狀態碼：" + response.status);
                         }
@@ -1195,13 +1266,37 @@
                     const sheet = workbook.Sheets[workbook.SheetNames[0]];
                     const jsonData = XLSX.utils.sheet_to_json(sheet);
 
+                    // 重設快取與繪製狀態
+                    this.renderedMap = {};
+                    this.failedMap = {};
+                    this.imageCache = {};
+                    this.loadingPromises = {};
+                    this.loadQueue = [];
+                    this.activeLoads = 0;
+
+                    // 取得預設資料夾與副檔名（若試算表使用公式但未重新計算快取時可做為備援）
+                    const defaultFolder = (jsonData[0] && jsonData[0].__EMPTY) ? String(jsonData[0].__EMPTY).trim() : 'ArtImages';
+                    const defaultExt = (jsonData[0] && jsonData[0].__EMPTY_2) ? String(jsonData[0].__EMPTY_2).trim() : 'jpg';
+
                     // 正規化欄位映射 (自動適配 url/URL/路徑, name/名稱/title, category/分類 等)
                     this.images = jsonData.map((item, idx) => {
-                        const url = item.url || item.URL || item.src || item['路徑'] || item['圖片路徑'] || '';
-                        const name = item.name || item.title || item['名稱'] || item['畫作名稱'] || ('作品 ' + (idx + 1));
+                        let url = String(item.url || item.URL || item.src || item['路徑'] || item['圖片路徑'] || '').trim();
+
+                        // 若公式儲存格未快取結果但存在畫作編號欄位，自動組合路徑
+                        if (!url) {
+                            const code = String(item.code || item['編號'] || item['檔名'] || item.__EMPTY_1 || '').trim();
+                            if (code) {
+                                url = code.includes('.') ? `${defaultFolder}/${code}` : `${defaultFolder}/${code}.${defaultExt}`;
+                            }
+                        }
+
+                        // 統一將反斜線轉為正斜線
+                        url = url.replace(/\\/g, '/').replace(/^\.\//, '');
+
+                        const name = String(item.name || item.title || item['名稱'] || item['畫作名稱'] || ('作品 ' + (idx + 1))).trim();
                         
-                        // 若無分類欄位，依檔名前綴智慧判斷系列（如 L->風景, A->系列A, S->靜物等）
-                        let category = item.category || item['分類'] || item['類別'] || '';
+                        // 若無分類欄位，依檔名前綴智慧判斷系列（如 L->風景, A->動物, S->靜物, C->動漫等）
+                        let category = String(item.category || item['分類'] || item['類別'] || '').trim();
                         if (!category && url) {
                             const filename = url.split('/').pop().toUpperCase();
                             if (filename.startsWith('L')) category = '風景系列';
@@ -1209,6 +1304,7 @@
                             else if (filename.startsWith('A')) category = '動物系列';
                             else if (filename.startsWith('P')) category = '人物系列';
                             else if (filename.startsWith('I')) category = '插畫創作';
+                            else if (filename.startsWith('C')) category = '動漫創作';
                         }
 
                         return {
@@ -1217,7 +1313,7 @@
                             name: name,
                             category: category
                         };
-                    }).filter(item => item.url && item.url.trim() !== '');
+                    }).filter(item => item.url && item.url !== '');
 
                     // DOM 更新後啟動 IntersectionObserver 延遲渲染
                     this.$nextTick(() => {
@@ -1229,25 +1325,26 @@
                 setupIntersectionObserver() {
                     if (this.observer) this.observer.disconnect();
 
-                    // 當作品接近螢幕邊緣 250px 時才啟動載入與繪製
+                    // 當作品接近螢幕邊緣 350px 時啟動載入與繪製
                     this.observer = new IntersectionObserver((entries) => {
                         entries.forEach(entry => {
                             if (entry.isIntersecting) {
                                 const target = entry.target;
-                                const id = target.getAttribute('data-index');
-                                if (id !== null) {
-                                    const item = this.images.find(img => img._id == id);
+                                const rawId = target.getAttribute('data-index');
+                                if (rawId !== null) {
+                                    const id = Number(rawId);
+                                    const item = this.images.find(img => img._id === id);
                                     if (item) {
+                                        this.observer.unobserve(target);
                                         this.renderCanvas(item);
                                     }
-                                    this.observer.unobserve(target);
                                 }
                             }
                         });
                     }, {
                         root: null,
-                        rootMargin: '250px 0px',
-                        threshold: 0.01
+                        rootMargin: '350px 0px',
+                        threshold: 0
                     });
 
                     this.syncCanvases();
@@ -1257,8 +1354,9 @@
                     if (!this.observer) return;
                     const triggers = document.querySelectorAll('.lazy-trigger');
                     triggers.forEach(el => {
-                        const id = el.getAttribute('data-index');
-                        if (!id) return;
+                        const rawId = el.getAttribute('data-index');
+                        if (rawId === null || rawId === '') return;
+                        const id = Number(rawId);
                         const canvas = document.getElementById('canvas_' + id);
                         if (!canvas) return;
 
@@ -1267,81 +1365,250 @@
                             return;
                         }
 
-                        // 【關鍵修復】：若該圖片先前已經載入過並存於記憶體快取中，立刻重繪至新 Canvas，0 延遲無縫顯示！
+                        // 若該圖片先前已經載入過並存於記憶體快取中，立刻重繪至新 Canvas，0 延遲無縫顯示
                         if (this.imageCache[id]) {
-                            const item = this.images.find(img => img._id == id);
-                            if (item) {
-                                this.drawToCanvas(canvas, this.imageCache[id]);
+                            if (this.drawToCanvas(canvas, this.imageCache[id])) {
                                 this.renderedMap[id] = true;
+                                this.failedMap[id] = false;
                             }
-                        } else {
-                            // 若尚未載入過，加入 IntersectionObserver 進入可視區後延遲載入
+                        } else if (!this.failedMap[id]) {
+                            // 若尚未載入完成，確保顯示骨架屏並加入 IntersectionObserver
+                            this.renderedMap[id] = false;
                             this.observer.observe(el);
                         }
                     });
                 },
 
-                // === 繪製至 Canvas 共用邏輯 ===
+                // === 建立多組路徑與副檔名大小寫備援清單 ===
+                buildCandidateUrls(rawUrl) {
+                    if (!rawUrl) return [];
+                    if (rawUrl.startsWith('data:') || rawUrl.startsWith('blob:') || /^https?:\/\//i.test(rawUrl)) {
+                        return [rawUrl];
+                    }
+
+                    const cleanUrl = rawUrl.split('?')[0].replace(/\\/g, '/').replace(/^\.\//, '');
+                    const lastSlash = cleanUrl.lastIndexOf('/');
+                    const dir = lastSlash >= 0 ? cleanUrl.slice(0, lastSlash + 1) : '';
+                    const file = lastSlash >= 0 ? cleanUrl.slice(lastSlash + 1) : cleanUrl;
+
+                    const lastDot = file.lastIndexOf('.');
+                    const stem = lastDot > 0 ? file.slice(0, lastDot) : file;
+                    const ext = lastDot > 0 ? file.slice(lastDot) : '';
+
+                    // 自動涵蓋原始副檔名、大小寫切換 (.jpg <-> .JPG) 與常見圖片格式備援
+                    const extCandidates = [];
+                    const pushUnique = (arr, val) => {
+                        if (val && !arr.includes(val)) arr.push(val);
+                    };
+
+                    if (ext) {
+                        pushUnique(extCandidates, ext);
+                        pushUnique(extCandidates, ext === ext.toLowerCase() ? ext.toUpperCase() : ext.toLowerCase());
+                    }
+                    ['.jpg', '.JPG', '.jpeg', '.JPEG', '.png', '.PNG', '.webp', '.WEBP'].forEach(e => pushUnique(extCandidates, e));
+
+                    const dirCandidates = [];
+                    pushUnique(dirCandidates, dir);
+                    if (!dir) {
+                        pushUnique(dirCandidates, 'ArtImages/');
+                    } else if (dir.toLowerCase() !== 'artimages/') {
+                        pushUnique(dirCandidates, 'ArtImages/');
+                    } else {
+                        pushUnique(dirCandidates, '');
+                    }
+
+                    const isHttp = window.location.protocol === 'http:' || window.location.protocol === 'https:';
+                    const suffix = isHttp ? ('?v=' + this.version) : '';
+
+                    const urls = [];
+                    dirCandidates.forEach(d => {
+                        extCandidates.forEach(e => {
+                            const rawCandidate = d + stem + e;
+                            // 若路徑尚未編碼，安全編碼空白與特殊字元
+                            const encoded = rawCandidate.includes('%') ? rawCandidate : encodeURI(rawCandidate);
+                            pushUnique(urls, encoded + suffix);
+                        });
+                    });
+
+                    return urls;
+                },
+
+                // === 單一圖片 URL 載入測試（相容 file://、同源伺服器與外部跨域網址） ===
+                tryLoadSingleUrl(url) {
+                    return new Promise((resolve, reject) => {
+                        const isExternalHttp = /^https?:\/\//i.test(url) && !url.startsWith(window.location.origin);
+
+                        const attempt = (useCors) => {
+                            const img = new Image();
+                            if (useCors) {
+                                img.crossOrigin = "anonymous";
+                            }
+                            img.decoding = "async";
+
+                            img.onload = () => {
+                                if ((img.naturalWidth || img.width) > 0) {
+                                    if (typeof img.decode === 'function') {
+                                        img.decode().catch(() => {}).finally(() => resolve(img));
+                                    } else {
+                                        resolve(img);
+                                    }
+                                } else {
+                                    reject(new Error("圖片尺寸為 0：" + url));
+                                }
+                            };
+
+                            img.onerror = () => {
+                                // 若外部網址因未提供 CORS 標頭被擋，自動降級移除 crossOrigin 再重試一次
+                                if (useCors) {
+                                    attempt(false);
+                                } else {
+                                    reject(new Error("載入失敗：" + url));
+                                }
+                            };
+
+                            img.src = url;
+                        };
+
+                        attempt(isExternalHttp);
+                    });
+                },
+
+                // === 排程佇列執行器（避免大量高解析度大圖同時請求造成網路塞車掉圖） ===
+                enqueueLoadTask(taskFn, highPriority = false) {
+                    return new Promise((resolve, reject) => {
+                        const job = { taskFn, resolve, reject };
+                        if (highPriority) {
+                            this.loadQueue.unshift(job);
+                        } else {
+                            this.loadQueue.push(job);
+                        }
+                        this.pumpLoadQueue();
+                    });
+                },
+                pumpLoadQueue() {
+                    while (this.activeLoads < this.maxConcurrentLoads && this.loadQueue.length > 0) {
+                        const job = this.loadQueue.shift();
+                        this.activeLoads++;
+                        Promise.resolve()
+                            .then(() => job.taskFn())
+                            .then(job.resolve, job.reject)
+                            .finally(() => {
+                                this.activeLoads--;
+                                this.pumpLoadQueue();
+                            });
+                    }
+                },
+
+                // === 智慧圖片載入核心：快取共用 + 請求去重 + 副檔名備援 + 異常重試 ===
+                loadImageSmart(item, highPriority = false) {
+                    if (this.imageCache[item._id]) {
+                        return Promise.resolve(this.imageCache[item._id]);
+                    }
+                    if (this.loadingPromises[item._id]) {
+                        return this.loadingPromises[item._id];
+                    }
+
+                    const candidates = this.buildCandidateUrls(item.url);
+
+                    const promise = this.enqueueLoadTask(async () => {
+                        // 最多進行 2 輪嘗試（第 2 輪針對網路瞬斷延遲 400ms 重試首選路徑）
+                        for (let round = 0; round < 2; round++) {
+                            if (round > 0) {
+                                await new Promise(r => setTimeout(r, 400));
+                            }
+                            const list = round === 0 ? candidates : candidates.slice(0, 2);
+                            for (const candidateUrl of list) {
+                                try {
+                                    const img = await this.tryLoadSingleUrl(candidateUrl);
+                                    this.imageCache[item._id] = img;
+                                    return img;
+                                } catch (_) {
+                                    // 繼續嘗試下一個備援路徑或副檔名
+                                }
+                            }
+                        }
+                        throw new Error("所有備援路徑均無法載入圖片：" + item.url);
+                    }, highPriority).finally(() => {
+                        delete this.loadingPromises[item._id];
+                    });
+
+                    this.loadingPromises[item._id] = promise;
+                    return promise;
+                },
+
+                // === 繪製至網格預覽 Canvas 共用邏輯 ===
                 drawToCanvas(canvas, image) {
+                    if (!canvas || !image) return false;
                     const ctx = canvas.getContext("2d");
-                    const MAX_PREVIEW_WIDTH = 1200;
+                    if (!ctx) return false;
+
+                    // 同時限制預覽畫布最大寬度與高度，防止行動裝置超出單頁 Canvas 記憶體上限導致部分圖片空白
+                    const MAX_PREVIEW_SIDE = 960;
                     let targetW = image.naturalWidth || image.width;
                     let targetH = image.naturalHeight || image.height;
+                    if (!targetW || !targetH) return false;
 
-                    if (targetW > MAX_PREVIEW_WIDTH) {
-                        const ratio = MAX_PREVIEW_WIDTH / targetW;
-                        targetW = MAX_PREVIEW_WIDTH;
-                        targetH = Math.round(targetH * ratio);
+                    const maxSide = Math.max(targetW, targetH);
+                    if (maxSide > MAX_PREVIEW_SIDE) {
+                        const ratio = MAX_PREVIEW_SIDE / maxSide;
+                        targetW = Math.max(1, Math.round(targetW * ratio));
+                        targetH = Math.max(1, Math.round(targetH * ratio));
                     }
 
                     canvas.width = targetW;
                     canvas.height = targetH;
 
+                    ctx.clearRect(0, 0, targetW, targetH);
                     ctx.imageSmoothingEnabled = true;
                     ctx.imageSmoothingQuality = "high";
                     ctx.drawImage(image, 0, 0, targetW, targetH);
 
                     this.drawWatermark(ctx, targetW, targetH, false);
                     canvas.dataset.rendered = 'true';
+                    return true;
                 },
 
                 // === 效能核心：高解析度適配與 Canvas 記憶體降載繪製 ===
                 renderCanvas(item) {
                     const canvasId = 'canvas_' + item._id;
-                    const canvas = document.getElementById(canvasId);
-                    if (!canvas) return;
 
                     // 若快取中已有圖片，直接繪製
                     if (this.imageCache[item._id]) {
-                        this.drawToCanvas(canvas, this.imageCache[item._id]);
-                        this.renderedMap[item._id] = true;
+                        const canvas = document.getElementById(canvasId);
+                        if (canvas && this.drawToCanvas(canvas, this.imageCache[item._id])) {
+                            this.renderedMap[item._id] = true;
+                            this.failedMap[item._id] = false;
+                        }
                         return;
                     }
 
-                    const image = new Image();
-                    image.crossOrigin = "anonymous";
+                    this.failedMap[item._id] = false;
 
-                    image.onload = () => {
-                        this.imageCache[item._id] = image; // 存入記憶體快取
-                        const currentCanvas = document.getElementById(canvasId);
-                        if (currentCanvas) {
-                            this.drawToCanvas(currentCanvas, image);
-                            this.renderedMap[item._id] = true;
-                        }
-                    };
+                    this.loadImageSmart(item, false)
+                        .then((image) => {
+                            const currentCanvas = document.getElementById(canvasId);
+                            if (currentCanvas && this.drawToCanvas(currentCanvas, image)) {
+                                this.renderedMap[item._id] = true;
+                            }
+                            this.failedMap[item._id] = false;
+                        })
+                        .catch((err) => {
+                            console.error("無法載入畫作圖片：", item.url, err);
+                            this.failedMap[item._id] = true;
+                        });
+                },
 
-                    let hasTriedFallback = false;
-                    image.onerror = () => {
-                        // 若直接載入失敗且路徑未包含 ArtImages/，嘗試加上 ArtImages/ 備援讀取
-                        if (!hasTriedFallback && !item.url.startsWith('ArtImages/') && !item.url.startsWith('http')) {
-                            hasTriedFallback = true;
-                            image.src = 'ArtImages/' + item.url + '?v=' + this.version;
-                        } else {
-                            console.error("無法載入畫作圖片：", item.url);
-                        }
-                    };
-
-                    image.src = item.url + "?v=" + this.version;
+                // 單張失敗手動重試
+                retryLoadImage(item) {
+                    delete this.imageCache[item._id];
+                    delete this.loadingPromises[item._id];
+                    this.failedMap[item._id] = false;
+                    this.renderedMap[item._id] = false;
+                    const canvas = document.getElementById('canvas_' + item._id);
+                    if (canvas) {
+                        delete canvas.dataset.rendered;
+                    }
+                    this.renderCanvas(item);
                 },
 
                 // === 統一浮水印繪製演算法 ===
@@ -1382,6 +1649,9 @@
                 },
                 closeModal() {
                     this.modalIndex = -1;
+                    this.modalLoading = false;
+                    this.modalError = false;
+                    this.modalRenderToken++;
                     document.body.style.overflow = ""; // 恢復背景捲動
                 },
                 prevModal() {
@@ -1398,50 +1668,83 @@
                         this.renderModalCanvas();
                     });
                 },
+                drawModalImage(image) {
+                    const canvas = document.getElementById("modalCanvas");
+                    if (!canvas || !image) return;
+                    const ctx = canvas.getContext("2d");
+                    if (!ctx) return;
+
+                    // 燈箱模式：以極高清晰度繪製大圖（長邊上限 2400px）
+                    const MAX_MODAL_SIDE = 2400;
+                    let targetW = image.naturalWidth || image.width;
+                    let targetH = image.naturalHeight || image.height;
+                    if (!targetW || !targetH) return;
+
+                    const maxSide = Math.max(targetW, targetH);
+                    if (maxSide > MAX_MODAL_SIDE) {
+                        const ratio = MAX_MODAL_SIDE / maxSide;
+                        targetW = Math.max(1, Math.round(targetW * ratio));
+                        targetH = Math.max(1, Math.round(targetH * ratio));
+                    }
+
+                    canvas.width = targetW;
+                    canvas.height = targetH;
+
+                    ctx.clearRect(0, 0, targetW, targetH);
+                    ctx.imageSmoothingEnabled = true;
+                    ctx.imageSmoothingQuality = "high";
+                    ctx.drawImage(image, 0, 0, targetW, targetH);
+
+                    this.drawWatermark(ctx, targetW, targetH, true);
+                },
                 renderModalCanvas() {
                     const item = this.currentModalItem;
                     if (!item) return;
 
-                    const canvas = document.getElementById("modalCanvas");
-                    if (!canvas) return;
+                    const token = ++this.modalRenderToken;
+                    this.modalError = false;
 
-                    const ctx = canvas.getContext("2d");
-                    const image = new Image();
-                    image.crossOrigin = "anonymous";
+                    // 若記憶體快取已有完整原圖，立即 0 延遲繪製大圖
+                    if (this.imageCache[item._id]) {
+                        this.modalLoading = false;
+                        this.$nextTick(() => {
+                            if (token === this.modalRenderToken) {
+                                this.drawModalImage(this.imageCache[item._id]);
+                            }
+                        });
+                        return;
+                    }
 
-                    image.onload = () => {
-                        // 燈箱模式：以極高清晰度繪製大圖（上限 2400px）
-                        const MAX_MODAL_WIDTH = 2400;
-                        let targetW = image.width;
-                        let targetH = image.height;
-
-                        if (targetW > MAX_MODAL_WIDTH) {
-                            const ratio = MAX_MODAL_WIDTH / targetW;
-                            targetW = MAX_MODAL_WIDTH;
-                            targetH = Math.round(targetH * ratio);
-                        }
-
-                        canvas.width = targetW;
-                        canvas.height = targetH;
-
-                        ctx.imageSmoothingEnabled = true;
-                        ctx.imageSmoothingQuality = "high";
-                        ctx.drawImage(image, 0, 0, targetW, targetH);
-
-                        this.drawWatermark(ctx, targetW, targetH, true);
-                    };
-
-                    let hasTriedFallback = false;
-                    image.onerror = () => {
-                        if (!hasTriedFallback && !item.url.startsWith('ArtImages/') && !item.url.startsWith('http')) {
-                            hasTriedFallback = true;
-                            image.src = 'ArtImages/' + item.url + '?v=' + this.version;
-                        } else {
-                            console.error("無法載入畫作圖片：", item.url);
-                        }
-                    };
-
-                    image.src = item.url + "?v=" + this.version;
+                    this.modalLoading = true;
+                    this.loadImageSmart(item, true)
+                        .then((image) => {
+                            if (token !== this.modalRenderToken) return;
+                            this.modalLoading = false;
+                            this.$nextTick(() => {
+                                this.drawModalImage(image);
+                                // 同步更新背景網格中對應卡片的 Canvas
+                                const gridCanvas = document.getElementById('canvas_' + item._id);
+                                if (gridCanvas && gridCanvas.dataset.rendered !== 'true') {
+                                    if (this.drawToCanvas(gridCanvas, image)) {
+                                        this.renderedMap[item._id] = true;
+                                    }
+                                }
+                            });
+                        })
+                        .catch((err) => {
+                            if (token !== this.modalRenderToken) return;
+                            console.error("無法載入燈箱畫作大圖：", item.url, err);
+                            this.modalLoading = false;
+                            this.modalError = true;
+                        });
+                },
+                retryModalImage() {
+                    const item = this.currentModalItem;
+                    if (!item) return;
+                    delete this.imageCache[item._id];
+                    delete this.loadingPromises[item._id];
+                    this.failedMap[item._id] = false;
+                    this.renderModalCanvas();
                 },
 
                 // === 友善防盜與版權提醒 ===
