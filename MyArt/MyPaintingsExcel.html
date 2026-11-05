@@ -8,6 +8,71 @@
     <meta http-equiv="Expires" content="-1" />
     <title>MIAO 藝術畫廊 | 數位作品典藏展</title>
 
+    <!-- App 內建瀏覽器 (LINE / FB / IG / Threads / Messenger / WeChat 等) 自動判斷跳往預設瀏覽器 -->
+    <script>
+        (function () {
+            var proto = window.location.protocol;
+            if (proto !== 'http:' && proto !== 'https:') {
+                window.__IN_APP_INFO__ = { isInApp: false, appName: '', isIOS: false, isAndroid: false };
+                return;
+            }
+
+            var ua = navigator.userAgent || navigator.vendor || '';
+            var isIOS = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+            var isAndroid = /Android/i.test(ua);
+
+            var appName = '';
+            if (/\bLine\//i.test(ua)) appName = 'LINE';
+            else if (/\bInstagram\b/i.test(ua)) appName = 'Instagram';
+            else if (/\bBarcelona\b/i.test(ua)) appName = 'Threads';
+            else if (/\bMessenger\b|\bOrca-Android\b/i.test(ua)) appName = 'Messenger';
+            else if (/\bFBAN\b|\bFBAV\b|\bFB_IAB\b|\bFBIOS\b/i.test(ua)) appName = 'Facebook';
+            else if (/\bMicroMessenger\b/i.test(ua)) appName = 'WeChat';
+            else if (/\bBytedanceWebview\b|\bmusical_ly\b|\bTikTok\b/i.test(ua)) appName = 'TikTok';
+            else if (/\bWeibo\b/i.test(ua)) appName = 'Weibo';
+
+            var isInApp = Boolean(appName);
+            window.__IN_APP_INFO__ = {
+                isInApp: isInApp,
+                appName: appName,
+                isIOS: isIOS,
+                isAndroid: isAndroid
+            };
+
+            if (!isInApp) return;
+
+            // 1. LINE 內建瀏覽器：加上官方參數 openExternalBrowser=1 直接自動喚起系統預設瀏覽器 (iOS / Android 皆支援)
+            if (appName === 'LINE') {
+                try {
+                    var urlObj = new URL(window.location.href);
+                    if (urlObj.searchParams.get('openExternalBrowser') !== '1') {
+                        urlObj.searchParams.set('openExternalBrowser', '1');
+                        window.location.replace(urlObj.toString());
+                        return;
+                    }
+                } catch (_) {}
+            }
+
+            // 2. Android 內建瀏覽器：透過標準 intent:// 自動跳往使用者設定的預設瀏覽器
+            if (isAndroid && appName !== 'WeChat') {
+                try {
+                    var guardKey = 'miao_auto_ext_jump';
+                    if (!sessionStorage.getItem(guardKey)) {
+                        sessionStorage.setItem(guardKey, '1');
+                        var scheme = proto.replace(':', '');
+                        var cleanHref = window.location.href;
+                        var hostAndPath = cleanHref.replace(/^https?:\/\//i, '');
+                        var intentUrl = 'intent://' + hostAndPath +
+                            '#Intent;scheme=' + scheme +
+                            ';action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE' +
+                            ';S.browser_fallback_url=' + encodeURIComponent(cleanHref) + ';end';
+                        window.location.href = intentUrl;
+                    }
+                } catch (_) {}
+            }
+        })();
+    </script>
+
     <!-- Google Fonts 典雅藝廊字體 -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -243,7 +308,33 @@
         .toolbar-right {
             display: flex;
             align-items: center;
-            gap: 16px;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .media-select {
+            background-color: rgba(10, 12, 16, 0.85);
+            color: var(--text-main);
+            border: 1px solid rgba(212, 175, 55, 0.3);
+            border-radius: 20px;
+            padding: 6px 14px;
+            font-size: 0.84rem;
+            font-family: inherit;
+            cursor: pointer;
+            outline: none;
+            transition: var(--transition-smooth);
+        }
+
+        .media-select:hover,
+        .media-select:focus {
+            border-color: var(--accent-gold);
+            color: var(--accent-gold-light);
+            box-shadow: 0 0 12px var(--accent-gold-glow);
+        }
+
+        .media-select option {
+            background-color: #121620;
+            color: var(--text-main);
         }
 
         .stats-badge {
@@ -516,8 +607,10 @@
 
         .art-meta {
             display: flex;
+            flex-wrap: wrap;
             align-items: center;
             justify-content: space-between;
+            gap: 8px;
             font-size: 0.82rem;
             color: var(--text-muted);
         }
@@ -532,12 +625,89 @@
             font-size: 0.75rem;
         }
 
-        .art-watermark-note {
-            display: flex;
+        .art-media-tag {
+            display: inline-flex;
             align-items: center;
-            gap: 4px;
-            font-size: 0.72rem;
-            color: var(--text-dim);
+            gap: 5px;
+            padding: 2px 10px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            border-radius: 4px;
+            color: #e5e7eb;
+            font-size: 0.75rem;
+            letter-spacing: 0.5px;
+        }
+
+        /* === App 內建瀏覽器跳轉預設瀏覽器引導橫幅 === */
+        .inapp-banner {
+            background: linear-gradient(135deg, rgba(28, 34, 46, 0.96) 0%, rgba(18, 22, 30, 0.96) 100%);
+            border: 1px solid var(--accent-gold);
+            border-radius: var(--radius-md);
+            padding: 16px 20px;
+            margin: 0 auto 28px auto;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 20px var(--accent-gold-glow);
+        }
+
+        .inapp-banner-info {
+            flex: 1 1 260px;
+            line-height: 1.55;
+        }
+
+        .inapp-banner-title {
+            color: var(--accent-gold-light);
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .inapp-banner-desc {
+            color: var(--text-muted);
+            font-size: 0.82rem;
+        }
+
+        .inapp-banner-actions {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .inapp-btn-primary {
+            background: linear-gradient(135deg, var(--accent-gold) 0%, #b8972e 100%);
+            color: #0b0d11;
+            border: none;
+            font-weight: 600;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.84rem;
+            cursor: pointer;
+            transition: var(--transition-smooth);
+        }
+
+        .inapp-btn-primary:hover {
+            filter: brightness(1.08);
+            transform: translateY(-1px);
+        }
+
+        .inapp-btn-secondary {
+            background: rgba(255, 255, 255, 0.06);
+            color: var(--text-main);
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            padding: 7px 14px;
+            border-radius: 20px;
+            font-size: 0.82rem;
+            cursor: pointer;
+            transition: var(--transition-smooth);
+        }
+
+        .inapp-btn-secondary:hover {
+            border-color: var(--accent-gold);
+            color: var(--accent-gold-light);
         }
 
         /* === 燈箱大圖賞析 (Lightbox Modal) === */
@@ -686,9 +856,19 @@
             color: var(--text-muted);
             letter-spacing: 1px;
             display: flex;
+            flex-wrap: wrap;
             align-items: center;
             justify-content: center;
-            gap: 16px;
+            gap: 12px;
+        }
+
+        .modal-media-badge {
+            color: #e5e7eb;
+            font-size: 0.82rem;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            padding: 2px 12px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.06);
         }
 
         .modal-watermark-badge {
@@ -912,6 +1092,11 @@
                 width: 100%;
             }
 
+            .media-select {
+                font-size: 16px; /* 防止 iOS Safari 點選下拉選單時自動縮放畫面 */
+                padding: 5px 12px;
+            }
+
             .modal-nav-btn { width: 42px; height: 42px; }
             .modal-nav-btn.prev { left: 10px; }
             .modal-nav-btn.next { right: 10px; }
@@ -937,6 +1122,21 @@
             <p class="gallery-subtitle">融匯光影與筆觸的純粹意境・數位典藏展示空間</p>
         </header>
 
+        <!-- App 內建瀏覽器提示：當系統限制自動跳轉時（如 iOS IG/FB/WeChat）提供一鍵跳轉與引導 -->
+        <div v-if="showInAppBanner" class="inapp-banner">
+            <div class="inapp-banner-info">
+                <div class="inapp-banner-title">建議使用系統預設瀏覽器開啟</div>
+                <div class="inapp-banner-desc">
+                    偵測到您目前位於 <strong>{{ inAppInfo.appName }}</strong> 內建瀏覽器，切換至預設瀏覽器可獲得最佳高畫質渲染與流暢度（若點擊按鈕受限，請點選右上／右下角「⋯」選擇「在預設瀏覽器中開啟」）。
+                </div>
+            </div>
+            <div class="inapp-banner-actions">
+                <button type="button" class="inapp-btn-primary" @click="openInDefaultBrowser">開啟預設瀏覽器</button>
+                <button type="button" class="inapp-btn-secondary" @click="copyCleanUrl">{{ urlCopied ? '已複製網址 ✓' : '複製網址' }}</button>
+                <button type="button" class="inapp-btn-secondary" @click="inAppDismissed = true">繼續瀏覽</button>
+            </div>
+        </div>
+
         <!-- 本地檔案讀取提示 (當 file:// 協定受限時提供手動選取支援) -->
         <div v-if="loadError" class="error-card">
             <h3>無法直接讀取 images.xlsx</h3>
@@ -957,7 +1157,7 @@
                 <input 
                     type="text" 
                     v-model="searchQuery" 
-                    placeholder="搜尋作品名稱或關鍵字..." 
+                    placeholder="搜尋作品名稱、媒材或分類..." 
                     class="search-input"
                     aria-label="搜尋作品"
                     autocomplete="off"
@@ -988,8 +1188,19 @@
                 </button>
             </div>
 
-            <!-- 右側狀態與視圖切換 -->
+            <!-- 右側媒材篩選、狀態與視圖切換 -->
             <div class="toolbar-right">
+                <select 
+                    v-if="mediaOptions.length > 0"
+                    v-model="selectedMedia"
+                    class="media-select"
+                    aria-label="依創作媒材篩選"
+                >
+                    <option value="all">全部媒材</option>
+                    <option v-for="m in mediaOptions" :key="m.name" :value="m.name">
+                        {{ m.name }} ({{ m.count }})
+                    </option>
+                </select>
                 <div class="stats-badge">
                     共 <span class="stats-highlight">{{ filteredImages.length }}</span> 件作品
                 </div>
@@ -1062,11 +1273,11 @@
                 <!-- 畫作資訊欄 -->
                 <div class="art-info">
                     <h2 class="art-title">{{ img.name }}</h2>
-                    <div class="art-meta">
+                    <div class="art-meta" v-if="img.category || img.media">
                         <span class="art-category-tag" v-if="img.category">{{ img.category }}</span>
-                        <span class="art-watermark-note">
-                            <svg style="width: 12px; height: 12px; fill: var(--accent-gold);" viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg>
-                            © 浮水印防護
+                        <span class="art-media-tag" v-if="img.media">
+                            <svg style="width: 12px; height: 12px; fill: var(--accent-gold);" viewBox="0 0 24 24"><path d="M12 3a9 9 0 0 0 0 18c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
+                            {{ img.media }}
                         </span>
                     </div>
                 </div>
@@ -1128,6 +1339,7 @@
                 <h3 class="modal-title">{{ currentModalItem.name }}</h3>
                 <div class="modal-subinfo">
                     <span v-if="currentModalItem.category">{{ currentModalItem.category }}</span>
+                    <span v-if="currentModalItem.media" class="modal-media-badge">媒材：{{ currentModalItem.media }}</span>
                     <span class="modal-watermark-badge">© MIAO Gallery 官方防偽典藏標記</span>
                 </div>
             </div>
@@ -1156,6 +1368,7 @@
                     images: [],
                     searchQuery: '',
                     selectedCategory: 'all',
+                    selectedMedia: 'all',
                     viewMode: 'grid', // 'grid' | 'large'
                     loadError: false,
                     renderedMap: {}, // 紀錄已繪製完成的 Canvas ID
@@ -1165,7 +1378,10 @@
                     modalError: false,
                     toastVisible: false,
                     showBackToTop: false,
-                    version: ''
+                    version: '',
+                    inAppInfo: window.__IN_APP_INFO__ || { isInApp: false, appName: '', isIOS: false, isAndroid: false },
+                    inAppDismissed: false,
+                    urlCopied: false
                 };
             },
             created() {
@@ -1202,7 +1418,26 @@
                         count: map[cat]
                     }));
                 },
-                // 智慧複合搜尋與分類過濾
+                // 自動提取 Excel 中所有創作媒材 (Media)，並統計數量
+                mediaOptions() {
+                    const map = Object.create(null);
+                    const order = [];
+                    for (let i = 0; i < this.images.length; i++) {
+                        const m = this.images[i].media;
+                        if (m) {
+                            if (!map[m]) {
+                                map[m] = 0;
+                                order.push(m);
+                            }
+                            map[m]++;
+                        }
+                    }
+                    return order.map(m => ({
+                        name: m,
+                        count: map[m]
+                    }));
+                },
+                // 智慧複合搜尋與分類／媒材過濾
                 filteredImages() {
                     let list = this.images;
 
@@ -1211,13 +1446,19 @@
                         list = list.filter(item => item.category === this.selectedCategory);
                     }
 
-                    // 關鍵字搜尋 (支援名稱、分類等欄位)
+                    // 媒材 (Media) 過濾
+                    if (this.selectedMedia !== 'all') {
+                        list = list.filter(item => item.media === this.selectedMedia);
+                    }
+
+                    // 關鍵字搜尋 (支援名稱、媒材、分類等欄位)
                     const q = this.searchQuery.trim().toLowerCase();
                     if (q) {
                         list = list.filter(item => {
                             const nameMatch = (item.name || '').toLowerCase().includes(q);
+                            const mediaMatch = (item.media || '').toLowerCase().includes(q);
                             const catMatch = (item.category || '').toLowerCase().includes(q);
-                            return nameMatch || catMatch;
+                            return nameMatch || mediaMatch || catMatch;
                         });
                     }
 
@@ -1229,6 +1470,10 @@
                         return this.filteredImages[this.modalIndex];
                     }
                     return null;
+                },
+                // 是否顯示內建瀏覽器切換提示橫幅
+                showInAppBanner() {
+                    return Boolean(this.inAppInfo && this.inAppInfo.isInApp && !this.inAppDismissed);
                 }
             },
             watch: {
@@ -1413,6 +1658,7 @@
                         url = url.replace(/\\/g, '/').replace(/^\.\//, '');
 
                         const name = String(item.name || item.title || item['名稱'] || item['畫作名稱'] || ('作品 ' + (idx + 1))).trim();
+                        const media = String(item.Media || item.media || item.MEDIA || item['媒材'] || item['材質'] || '').trim();
                         
                         // 若無分類欄位，依檔名前綴智慧判斷系列（如 L->風景, A->動物, S->靜物, C->動漫等）
                         let category = String(item.category || item['分類'] || item['類別'] || '').trim();
@@ -1430,6 +1676,7 @@
                             _id: idx,
                             url: url,
                             name: name,
+                            media: media,
                             category: category
                         };
                     }).filter(item => item.url && item.url !== '');
@@ -1946,6 +2193,63 @@
                 resetFilters() {
                     this.searchQuery = '';
                     this.selectedCategory = 'all';
+                    this.selectedMedia = 'all';
+                },
+
+                // === 手動觸發跳往系統預設瀏覽器（相容 LINE / Android Intent / iOS Safari Scheme） ===
+                openInDefaultBrowser() {
+                    const href = window.location.href;
+                    const proto = window.location.protocol;
+                    if (proto !== 'http:' && proto !== 'https:') return;
+
+                    // LINE 專用外部開啟參數
+                    if (this.inAppInfo.appName === 'LINE') {
+                        const urlObj = new URL(href);
+                        urlObj.searchParams.set('openExternalBrowser', '1');
+                        window.location.href = urlObj.toString();
+                        return;
+                    }
+
+                    // Android：透過點擊手勢觸發標準瀏覽器 Intent
+                    if (this.inAppInfo.isAndroid) {
+                        const scheme = proto.replace(':', '');
+                        const hostAndPath = href.replace(/^https?:\/\//i, '');
+                        window.location.href = 'intent://' + hostAndPath +
+                            '#Intent;scheme=' + scheme +
+                            ';action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE' +
+                            ';S.browser_fallback_url=' + encodeURIComponent(href) + ';end';
+                        return;
+                    }
+
+                    // iOS：嘗試透過 x-safari-https:// (iOS 17+) 喚起 Safari，同時自動複製網址做為備援
+                    if (this.inAppInfo.isIOS) {
+                        this.copyCleanUrl();
+                        const safariScheme = proto === 'https:' ? 'x-safari-https://' : 'x-safari-http://';
+                        window.location.href = safariScheme + href.replace(/^https?:\/\//i, '');
+                    }
+                },
+
+                // 複製乾淨網址方便貼至預設瀏覽器
+                async copyCleanUrl() {
+                    try {
+                        const urlObj = new URL(window.location.href);
+                        urlObj.searchParams.delete('openExternalBrowser');
+                        const clean = urlObj.toString();
+                        if (navigator.clipboard && navigator.clipboard.writeText) {
+                            await navigator.clipboard.writeText(clean);
+                        } else {
+                            const ta = document.createElement('textarea');
+                            ta.value = clean;
+                            ta.style.position = 'fixed';
+                            ta.style.opacity = '0';
+                            document.body.appendChild(ta);
+                            ta.select();
+                            document.execCommand('copy');
+                            document.body.removeChild(ta);
+                        }
+                        this.urlCopied = true;
+                        setTimeout(() => { this.urlCopied = false; }, 2500);
+                    } catch (_) {}
                 }
             }
         }).mount("#app");
