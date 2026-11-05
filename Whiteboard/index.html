@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>互動白板 Whiteboard</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="app-shell" id="appShell">
+    <!-- 頂部工具列：歷史紀錄、底圖管理、匯出儲存 -->
+    <header class="topbar" role="banner">
+      <div class="brand">
+        <span class="brand-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 19l7-7 3 3-7 7-3-3z"></path>
+            <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path>
+            <path d="M2 2l7.586 7.586"></path>
+            <circle cx="11" cy="11" r="2"></circle>
+          </svg>
+        </span>
+        <span class="brand-title">互動白板</span>
+      </div>
+
+      <!-- 中段：復原 / 重做 / 整體淡化 / 清除 -->
+      <div class="topbar-group" role="group" aria-label="畫布操作">
+        <button type="button" class="action-btn" id="undoBtn" title="復原上一步 (Ctrl+Z)" aria-label="復原上一步" disabled>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 7v6h6"></path>
+            <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path>
+          </svg>
+          <span class="btn-label">復原</span>
+        </button>
+
+        <button type="button" class="action-btn" id="redoBtn" title="重做下一步 (Ctrl+Y)" aria-label="重做下一步" disabled>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 7v6h-6"></path>
+            <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"></path>
+          </svg>
+          <span class="btn-label">重做</span>
+        </button>
+
+        <span class="divider" aria-hidden="true"></span>
+
+        <button type="button" class="action-btn" id="fadeAllBtn" title="將目前所有筆跡整體淡化 25%（不影響底圖）" aria-label="整體淡化筆跡">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>
+          </svg>
+          <span class="btn-label">整體淡化</span>
+        </button>
+
+        <button type="button" class="action-btn danger-hover" id="clearInkBtn" title="清除所有手繪筆跡（保留底圖，可復原）" aria-label="清除所有筆跡">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+            <path d="M10 11v6"></path>
+            <path d="M14 11v6"></path>
+            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+          </svg>
+          <span class="btn-label">清除筆跡</span>
+        </button>
+      </div>
+
+      <!-- 右段：底紋、匯入底圖、儲存匯出 -->
+      <div class="topbar-group" role="group" aria-label="底圖與匯出">
+        <label class="select-wrap" title="選擇白板背景樣式">
+          <span class="sr-only">白板底紋</span>
+          <select id="paperSelect" aria-label="白板底紋樣式">
+            <option value="plain">純白背景</option>
+            <option value="grid">方格底紋</option>
+            <option value="dots">點陣底紋</option>
+            <option value="warm">護眼米白</option>
+          </select>
+        </label>
+
+        <input type="file" id="bgFileInput" accept="image/*" hidden>
+        <button type="button" class="action-btn" id="importBgBtn" title="匯入圖片作為底圖（亦支援拖曳圖片或 Ctrl+V 貼上）" aria-label="匯入底圖">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            <circle cx="8.5" cy="8.5" r="1.5"></circle>
+            <polyline points="21 15 16 10 5 21"></polyline>
+          </svg>
+          <span class="btn-label">匯入底圖</span>
+        </button>
+
+        <button type="button" class="action-btn" id="bgSettingsBtn" title="調整底圖比例、淡化度或移除底圖" aria-label="底圖設定" hidden>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+          <span class="btn-label">底圖設定</span>
+        </button>
+
+        <div class="export-dropdown-wrap">
+          <button type="button" class="primary-btn" id="exportToggleBtn" aria-expanded="false" aria-controls="exportPanel">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            <span>儲存圖片</span>
+          </button>
+
+          <!-- 儲存匯出設定面板 -->
+          <div class="floating-popover export-popover" id="exportPanel" role="dialog" aria-label="儲存圖片選項" hidden>
+            <div class="popover-title">匯出儲存設定</div>
+            <label class="field-row">
+              <span>檔案名稱</span>
+              <input type="text" id="exportNameInput" value="whiteboard" placeholder="輸入檔名">
+            </label>
+            <label class="field-row">
+              <span>圖片格式</span>
+              <select id="exportFormatSelect">
+                <option value="png">PNG（無損高畫質）</option>
+                <option value="jpeg">JPG（檔案較小）</option>
+                <option value="png-transparent">PNG（透明背景，不含白板底色）</option>
+              </select>
+            </label>
+            <button type="button" class="primary-btn full-width" id="confirmExportBtn">立即下載圖片</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- 底圖調整浮動面板（匯入底圖後可隨時開啟微調） -->
+    <div class="floating-popover bg-popover" id="bgPanel" role="dialog" aria-label="底圖調整" hidden>
+      <div class="popover-header">
+        <span class="popover-title">底圖顯示與淡化</span>
+        <button type="button" class="icon-close-btn" id="closeBgPanelBtn" aria-label="關閉底圖設定">&times;</button>
+      </div>
+      <label class="field-row">
+        <span>縮放配置</span>
+        <select id="bgFitSelect">
+          <option value="contain">完整顯示（等比置中）</option>
+          <option value="cover">填滿白板（等比裁切）</option>
+          <option value="center">原始尺寸置中</option>
+        </select>
+      </label>
+      <label class="field-col">
+        <div class="slider-header">
+          <span>底圖不透明度（淡化底圖）</span>
+          <strong id="bgOpacityVal">100%</strong>
+        </div>
+        <input type="range" id="bgOpacityRange" min="10" max="100" value="100">
+      </label>
+      <div class="popover-actions">
+        <button type="button" class="action-btn" id="replaceBgBtn">更換圖片</button>
+        <button type="button" class="action-btn danger-text" id="removeBgBtn">移除底圖</button>
+      </div>
+    </div>
+
+    <!-- 主工作區：畫布舞台 + 繪圖工具面板 -->
+    <main class="workspace" id="workspace">
+      <!-- 左側／底部浮動繪圖工具列 -->
+      <aside class="tool-dock" aria-label="繪圖工具列">
+        <!-- 筆刷與擦拭／淡化模式 -->
+        <div class="dock-section">
+          <span class="section-caption">工具與筆刷</span>
+          <div class="tool-grid" role="radiogroup" aria-label="筆刷與橡皮擦工具">
+            <button type="button" class="tool-btn active" data-tool="pen" role="radio" aria-checked="true" title="簽字筆 (1) — 清晰流暢實線">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 19l7-7 3 3-7 7-3-3z"></path>
+                <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path>
+              </svg>
+              <span>簽字筆</span>
+            </button>
+
+            <button type="button" class="tool-btn" data-tool="highlighter" role="radio" aria-checked="false" title="螢光筆 (2) — 半透明重點標記，單筆不疊黑">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 11l-6 6v3h9l3-3"></path>
+                <path d="M22 12l-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"></path>
+              </svg>
+              <span>螢光筆</span>
+            </button>
+
+            <button type="button" class="tool-btn" data-tool="soft" role="radio" aria-checked="false" title="柔邊水彩 (3) — 柔和羽化暈染筆觸">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18.37 2.63L14 7l-1.59-1.59a2 2 0 0 0-2.82 0L8 7l9 9 1.59-1.59a2 2 0 0 0 0-2.82L17 10l4.37-4.37a2.12 2.12 0 1 0-3-3z"></path>
+                <path d="M9 8c-2 3-4 3.5-7 4l8 10c2-1 6-5 6-7"></path>
+              </svg>
+              <span>水彩筆</span>
+            </button>
+
+            <button type="button" class="tool-btn" data-tool="spray" role="radio" aria-checked="false" title="粉彩噴槍 (4) — 自然顆粒噴霧質感">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="6" y="10" width="8" height="11" rx="2"></rect>
+                <path d="M8 10V7h4v3"></path>
+                <circle cx="17" cy="5" r="1"></circle>
+                <circle cx="20" cy="7" r="1"></circle>
+                <circle cx="20" cy="3" r="1"></circle>
+                <circle cx="17" cy="9" r="1"></circle>
+              </svg>
+              <span>噴槍粉彩</span>
+            </button>
+
+            <button type="button" class="tool-btn" data-tool="fade" role="radio" aria-checked="false" title="局部淡化筆 (5) — 塗抹漸進減淡筆跡，不傷底圖">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="9" stroke-dasharray="3 3"></circle>
+                <path d="M12 3a9 9 0 0 1 0 18"></path>
+              </svg>
+              <span>局部淡化</span>
+            </button>
+
+            <button type="button" class="tool-btn" data-tool="eraser" role="radio" aria-checked="false" title="橡皮擦 (6) — 擦除筆跡，完整保留底圖">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 20H7L3 16c-.8-.8-.8-2 0-2.8L13.8 2.4c.8-.8 2-.8 2.8 0L21.6 7.4c.8.8.8 2 0 2.8L12 20"></path>
+                <path d="M6.5 13.5L13.5 20"></path>
+              </svg>
+              <span>橡皮擦</span>
+            </button>
+          </div>
+        </div>
+
+        <hr class="dock-sep">
+
+        <!-- 顏色選擇區 -->
+        <div class="dock-section" id="colorSection">
+          <div class="section-row">
+            <span class="section-caption">筆刷顏色</span>
+            <label class="custom-color-chip" title="自訂任意顏色">
+              <input type="color" id="customColorInput" value="#1e293b" aria-label="自訂顏色">
+              <span class="color-wheel-badge" id="customColorPreview"></span>
+              <span class="custom-color-text">自訂</span>
+            </label>
+          </div>
+
+          <div class="swatch-grid" id="swatchGrid" role="radiogroup" aria-label="預設顏色">
+            <button type="button" class="swatch active" data-color="#1e293b" style="--sw:#1e293b" aria-label="墨黑色" title="墨黑色"></button>
+            <button type="button" class="swatch" data-color="#ef4444" style="--sw:#ef4444" aria-label="緋紅色" title="緋紅色"></button>
+            <button type="button" class="swatch" data-color="#f97316" style="--sw:#f97316" aria-label="亮橘色" title="亮橘色"></button>
+            <button type="button" class="swatch" data-color="#eab308" style="--sw:#eab308" aria-label="琥珀黃" title="琥珀黃"></button>
+            <button type="button" class="swatch" data-color="#22c55e" style="--sw:#22c55e" aria-label="翠綠色" title="翠綠色"></button>
+            <button type="button" class="swatch" data-color="#06b6d4" style="--sw:#06b6d4" aria-label="青藍色" title="青藍色"></button>
+            <button type="button" class="swatch" data-color="#2563eb" style="--sw:#2563eb" aria-label="寶藍色" title="寶藍色"></button>
+            <button type="button" class="swatch" data-color="#8b5cf6" style="--sw:#8b5cf6" aria-label="羅蘭紫" title="羅蘭紫"></button>
+            <button type="button" class="swatch" data-color="#ec4899" style="--sw:#ec4899" aria-label="桃粉色" title="桃粉色"></button>
+            <button type="button" class="swatch swatch-light" data-color="#ffffff" style="--sw:#ffffff" aria-label="純白色" title="純白色"></button>
+          </div>
+        </div>
+
+        <hr class="dock-sep">
+
+        <!-- 筆刷粗細與濃度／淡化強度 -->
+        <div class="dock-section">
+          <div class="slider-block">
+            <div class="slider-header">
+              <label for="sizeRange">筆刷粗細</label>
+              <strong id="sizeValueLabel">6 px</strong>
+            </div>
+            <input type="range" id="sizeRange" min="1" max="80" value="6">
+            <div class="quick-sizes" aria-label="快速粗細預設">
+              <button type="button" class="size-pill" data-size="3">細 3</button>
+              <button type="button" class="size-pill active" data-size="6">中 6</button>
+              <button type="button" class="size-pill" data-size="16">粗 16</button>
+              <button type="button" class="size-pill" data-size="36">特粗 36</button>
+            </div>
+          </div>
+
+          <div class="slider-block" id="strengthBlock">
+            <div class="slider-header">
+              <label for="strengthRange" id="strengthLabel">筆刷濃度</label>
+              <strong id="strengthValueLabel">100%</strong>
+            </div>
+            <input type="range" id="strengthRange" min="10" max="100" value="100">
+          </div>
+
+          <!-- 即時筆觸大小預覽 -->
+          <div class="brush-preview-box" title="目前筆刷尺寸與顏色預覽">
+            <span class="brush-preview-dot" id="brushPreviewDot"></span>
+          </div>
+        </div>
+      </aside>
+
+      <!-- 多圖層 Canvas 畫布舞台 -->
+      <section class="canvas-stage paper-plain" id="canvasStage" aria-label="白板繪圖區域">
+        <!-- 圖層 1：匯入的底圖（獨立於筆跡層，不被橡皮擦或淡化破壞） -->
+        <canvas id="bgCanvas"></canvas>
+        <!-- 圖層 2：已完成的筆跡主圖層 -->
+        <canvas id="drawCanvas"></canvas>
+        <!-- 圖層 3：單筆繪製暫存層（確保螢光筆／水彩單筆塗抹均勻不疊黑） -->
+        <canvas id="tempCanvas"></canvas>
+
+        <!-- 游標筆刷範圍指示環 -->
+        <div class="cursor-ring" id="cursorRing" aria-hidden="true"></div>
+
+        <!-- 拖曳圖片匯入提示遮罩 -->
+        <div class="drop-overlay" id="dropOverlay" hidden>
+          <div class="drop-card">
+            <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              <circle cx="8.5" cy="8.5" r="1.5"></circle>
+              <polyline points="21 15 16 10 5 21"></polyline>
+            </svg>
+            <p>放開滑鼠即可將圖片設為白板底圖</p>
+          </div>
+        </div>
+
+        <!-- 狀態提示 Toast -->
+        <div class="toast" id="toastMsg" role="status" aria-live="polite" hidden></div>
+      </section>
+    </main>
+  </div>
+
+  <script defer src="./app.js"></script>
+</body>
+</html>
