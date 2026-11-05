@@ -55,6 +55,13 @@
   const dropOverlay = document.getElementById('dropOverlay');
   const toastMsg = document.getElementById('toastMsg');
 
+  const inAppModal = document.getElementById('inAppModal');
+  const inAppDesc = document.getElementById('inAppDesc');
+  const inAppSteps = document.getElementById('inAppSteps');
+  const openExtBrowserBtn = document.getElementById('openExtBrowserBtn');
+  const copyPageUrlBtn = document.getElementById('copyPageUrlBtn');
+  const dismissInAppBtn = document.getElementById('dismissInAppBtn');
+
   // --- 離屏輔助 Canvas（供「局部淡化」即時遮罩合成與尺寸變更轉存共用，嚴格控制數量以節省記憶體） ---
   const snapshotCanvas = document.createElement('canvas');
   const maskCanvas = document.createElement('canvas');
@@ -1012,10 +1019,143 @@
     }
   }
 
+  // --- 偵測 LINE / FB / IG 等 App 內建瀏覽器並引導跳往預設瀏覽器 ---
+  function detectInAppBrowser(ua) {
+    if (/\bLine\//i.test(ua)) return { id: 'line', name: 'LINE' };
+    if (/\b(FBAN|FBAV|FB_IAB)\b/i.test(ua)) {
+      if (/\bMessenger\b|FB_IAB\/Orca/i.test(ua)) return { id: 'messenger', name: 'Messenger' };
+      return { id: 'facebook', name: 'Facebook' };
+    }
+    if (/\bInstagram\b/i.test(ua)) return { id: 'instagram', name: 'Instagram' };
+    if (/\bBarcelona\b/i.test(ua)) return { id: 'threads', name: 'Threads' };
+    if (/\bMicroMessenger\b/i.test(ua)) return { id: 'wechat', name: 'WeChat（微信）' };
+    if (/\b(BytedanceWebview|musical_ly|TikTok)\b/i.test(ua)) return { id: 'tiktok', name: 'TikTok' };
+
+    if (/\bAndroid\b/i.test(ua) && /;\s*wv\b/i.test(ua)) {
+      return { id: 'android-webview', name: 'App 內建瀏覽器' };
+    }
+
+    const isIOS = /\b(iPhone|iPad|iPod)\b/i.test(ua);
+    const isStandalone = window.navigator.standalone === true ||
+      (typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: standalone)').matches);
+    if (isIOS && !isStandalone && !/\b(Safari|CriOS|FxiOS|EdgiOS|OPiOS)\b/i.test(ua)) {
+      return { id: 'ios-webview', name: 'App 內建瀏覽器' };
+    }
+
+    return null;
+  }
+
+  function buildExternalBrowserUrl(appInfo, ua) {
+    const isHttp = window.location.protocol === 'http:' || window.location.protocol === 'https:';
+    if (!isHttp) return null;
+
+    if (appInfo.id === 'line') {
+      const target = new URL(window.location.href);
+      target.searchParams.set('openExternalBrowser', '1');
+      return target.toString();
+    }
+
+    const scheme = window.location.protocol.replace(':', '');
+    const cleanUrl = window.location.href.replace(/^https?:\/\//i, '');
+
+    if (/\bAndroid\b/i.test(ua)) {
+      return `intent://${cleanUrl}#Intent;scheme=${scheme};S.browser_fallback_url=${encodeURIComponent(window.location.href)};end`;
+    }
+
+    if (/\b(iPhone|iPad|iPod)\b/i.test(ua)) {
+      return `x-safari-${scheme}://${cleanUrl}`;
+    }
+
+    return window.location.href;
+  }
+
+  function copyTextFallback(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try {
+      ok = document.execCommand('copy');
+    } catch (_) {}
+    ta.remove();
+    return ok;
+  }
+
+  function setupInAppBrowserGuard() {
+    if (!inAppModal) return;
+    const ua = navigator.userAgent || '';
+    const appInfo = detectInAppBrowser(ua);
+    if (!appInfo) return;
+
+    const extUrl = buildExternalBrowserUrl(appInfo, ua);
+    const isIOS = /\b(iPhone|iPad|iPod)\b/i.test(ua);
+
+    inAppDesc.textContent = `偵測到您目前在「${appInfo.name}」內建瀏覽器開啟，可能會導致無法正常下載與儲存白板圖片。`;
+
+    if (!extUrl) {
+      // 本機檔案附件模式（非 http/https 網址）
+      openExtBrowserBtn.hidden = true;
+      copyPageUrlBtn.hidden = true;
+      inAppSteps.innerHTML = '您目前是以本機檔案附件方式開啟，建議點選右上或右下角 <strong>「分享 / ⋯」</strong> 圖示，選擇以 <strong>Safari / Chrome</strong> 開啟。';
+    } else {
+      openExtBrowserBtn.href = extUrl;
+      if (isIOS && appInfo.id !== 'line') {
+        inAppSteps.innerHTML = `若點擊下方按鈕遭 ${appInfo.name} 阻擋，請點選畫面右上角或右下角 <strong>「⋯」</strong> 選單，選擇 <strong>「在外部瀏覽器 / Safari 開啟」</strong>。`;
+      }
+    }
+
+    openExtBrowserBtn.addEventListener('click', (e) => {
+      if (!extUrl) {
+        e.preventDefault();
+        return;
+      }
+      setTimeout(() => {
+        if (!document.hidden) {
+          showToast('若未自動跳轉，請點右上／右下「⋯」選在預設瀏覽器開啟', 3200);
+        }
+      }, 900);
+    });
+
+    copyPageUrlBtn.addEventListener('click', async () => {
+      const cleanShareUrl = (() => {
+        try {
+          const u = new URL(window.location.href);
+          u.searchParams.delete('openExternalBrowser');
+          return u.toString();
+        } catch (_) {
+          return window.location.href;
+        }
+      })();
+
+      let copied = false;
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        try {
+          await navigator.clipboard.writeText(cleanShareUrl);
+          copied = true;
+        } catch (_) {}
+      }
+      if (!copied) {
+        copied = copyTextFallback(cleanShareUrl);
+      }
+      showToast(copied ? '已複製網址！請開啟 Safari 或 Chrome 貼上前往' : '複製失敗，請手動長按網址列複製');
+    });
+
+    dismissInAppBtn.addEventListener('click', () => {
+      inAppModal.hidden = true;
+    });
+
+    inAppModal.hidden = false;
+  }
+
   // --- 初始化啟動 ---
   function init() {
     updateToolUI();
     bindEvents();
+    setupInAppBrowserGuard();
     requestAnimationFrame(() => {
       resizeCanvases(true);
     });

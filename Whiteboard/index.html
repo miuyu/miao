@@ -4,6 +4,41 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>互動白板 Whiteboard</title>
+  <script>
+    // 偵測 LINE 與 Android App 內建瀏覽器，於頁面載入第一時間自動跳往系統預設瀏覽器
+    (function () {
+      var ua = navigator.userAgent || '';
+      var isHttp = location.protocol === 'http:' || location.protocol === 'https:';
+      if (!isHttp) return;
+
+      // 1. LINE（iOS / Android 皆支援官方 openExternalBrowser=1 自動喚起預設瀏覽器）
+      if (/\bLine\//i.test(ua)) {
+        try {
+          var lineUrl = new URL(location.href);
+          if (lineUrl.searchParams.get('openExternalBrowser') !== '1') {
+            lineUrl.searchParams.set('openExternalBrowser', '1');
+            location.replace(lineUrl.toString());
+            return;
+          }
+        } catch (_) {}
+      }
+
+      // 2. Android 其他內建瀏覽器（FB / IG / Messenger / Threads / WeChat / WebView）嘗試透過 Intent 跳預設瀏覽器
+      var isAndroid = /\bAndroid\b/i.test(ua);
+      var isOtherInApp = /\b(FBAN|FBAV|FB_IAB|Instagram|Barcelona|MicroMessenger|BytedanceWebview|musical_ly|TikTok)\b|;\s*wv\b/i.test(ua);
+      if (isAndroid && isOtherInApp) {
+        try {
+          if (sessionStorage.getItem('wb_android_intent_tried') !== '1') {
+            sessionStorage.setItem('wb_android_intent_tried', '1');
+            var scheme = location.protocol.replace(':', '');
+            var cleanUrl = location.href.replace(/^https?:\/\//i, '');
+            var intentUrl = 'intent://' + cleanUrl + '#Intent;scheme=' + scheme + ';S.browser_fallback_url=' + encodeURIComponent(location.href) + ';end';
+            location.replace(intentUrl);
+          }
+        } catch (_) {}
+      }
+    })();
+  </script>
   <link rel="stylesheet" href="./style.css">
 </head>
 <body>
@@ -299,6 +334,27 @@
         <div class="toast" id="toastMsg" role="status" aria-live="polite" hidden></div>
       </section>
     </main>
+
+    <!-- App 內建瀏覽器（LINE / FB / IG 等）跳轉預設瀏覽器引導彈窗 -->
+    <div class="inapp-backdrop" id="inAppModal" role="dialog" aria-modal="true" aria-labelledby="inAppTitle" hidden>
+      <div class="inapp-card">
+        <div class="inapp-badge" aria-hidden="true">↗ 請切換至預設瀏覽器</div>
+        <h2 class="inapp-title" id="inAppTitle">建議使用系統預設瀏覽器開啟</h2>
+        <p class="inapp-desc" id="inAppDesc">
+          偵測到您目前在 App 內建瀏覽器中開啟，可能會無法正常下載與儲存白板圖片。
+        </p>
+        <div class="inapp-steps" id="inAppSteps">
+          若點擊下方按鈕未自動跳轉，請點選畫面右上角或右下角的 <strong>「⋯」</strong> 選單，選擇 <strong>「以預設瀏覽器開啟 / 在 Safari 開啟」</strong>。
+        </div>
+        <div class="inapp-actions">
+          <a href="#" class="primary-btn full-width inapp-link-btn" id="openExtBrowserBtn">開啟預設瀏覽器</a>
+          <div class="inapp-sub-actions">
+            <button type="button" class="action-btn" id="copyPageUrlBtn">複製網址</button>
+            <button type="button" class="action-btn" id="dismissInAppBtn">先在此繼續使用</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script defer src="./app.js"></script>
