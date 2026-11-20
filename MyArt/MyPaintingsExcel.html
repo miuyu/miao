@@ -6,7 +6,43 @@
     <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="-1" />
+    <!-- 禁止搜尋引擎爬蟲索引、快取、收錄圖片及禁止 AI 模型擷取訓練 -->
+    <meta name="robots" content="noindex, nofollow, noarchive, noimageindex, nosnippet, notranslate, noai, noimageai" />
+    <meta name="googlebot" content="noindex, nofollow, noarchive, noimageindex, nosnippet" />
+    <meta name="bingbot" content="noindex, nofollow, noarchive, noimageindex, nosnippet" />
+    <meta name="GPTBot" content="noindex, nofollow" />
+    <meta name="CCBot" content="noindex, nofollow" />
+    <meta name="ClaudeBot" content="noindex, nofollow" />
     <title>MIAO 藝術畫廊 | 數位作品典藏展</title>
+
+    <!-- 防機器人讀寫保護：Canvas 像素匯出鎖定與自動化爬蟲預檢 -->
+    <script>
+        (function () {
+            // 1. 防止自動化腳本透過 toDataURL / toBlob 批次擷取畫作 Canvas 影像資料
+            try {
+                var origToDataURL = HTMLCanvasElement.prototype.toDataURL;
+                var origToBlob = HTMLCanvasElement.prototype.toBlob;
+                var isProtectedCanvas = function (el) {
+                    return el && el.classList && (el.classList.contains('art-canvas') || el.classList.contains('modal-canvas'));
+                };
+                HTMLCanvasElement.prototype.toDataURL = function () {
+                    if (isProtectedCanvas(this)) {
+                        console.warn('MIAO Gallery Security: 禁止自動化腳本讀取畫布影像資料。');
+                        return 'data:,';
+                    }
+                    return origToDataURL.apply(this, arguments);
+                };
+                HTMLCanvasElement.prototype.toBlob = function (callback) {
+                    if (isProtectedCanvas(this)) {
+                        console.warn('MIAO Gallery Security: 禁止自動化腳本匯出畫布影像。');
+                        if (typeof callback === 'function') callback(null);
+                        return;
+                    }
+                    return origToBlob.apply(this, arguments);
+                };
+            } catch (_) {}
+        })();
+    </script>
 
     <!-- App 內建瀏覽器 (LINE / FB / IG / Threads / Messenger / WeChat 等) 自動判斷跳往預設瀏覽器 -->
     <script>
@@ -710,6 +746,135 @@
             color: var(--accent-gold-light);
         }
 
+        /* === 防機器人讀寫：真人互動進場驗證卡片與阻擋面板 === */
+        .security-gate-card {
+            background: linear-gradient(145deg, rgba(22, 27, 36, 0.95) 0%, rgba(13, 16, 22, 0.98) 100%);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            padding: 38px 28px;
+            margin: 20px auto 45px auto;
+            max-width: 540px;
+            text-align: center;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75), 0 0 30px rgba(212, 175, 55, 0.12);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .security-gate-card.blocked {
+            border-color: rgba(239, 68, 68, 0.5);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), 0 0 25px rgba(239, 68, 68, 0.15);
+        }
+
+        .security-shield-icon {
+            width: 48px;
+            height: 48px;
+            margin: 0 auto 16px auto;
+            border-radius: 50%;
+            background: rgba(212, 175, 55, 0.12);
+            border: 1px solid rgba(212, 175, 55, 0.35);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--accent-gold-light);
+        }
+
+        .security-gate-card.blocked .security-shield-icon {
+            background: rgba(239, 68, 68, 0.12);
+            border-color: rgba(239, 68, 68, 0.4);
+            color: #f87171;
+        }
+
+        .security-gate-title {
+            font-family: var(--font-display);
+            font-size: 1.35rem;
+            font-weight: 700;
+            color: #ffffff;
+            letter-spacing: 1.5px;
+            margin-bottom: 10px;
+        }
+
+        .security-gate-desc {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            line-height: 1.65;
+            margin-bottom: 24px;
+        }
+
+        /* 滑動解鎖軌道 */
+        .slide-track {
+            position: relative;
+            width: 100%;
+            max-width: 360px;
+            height: 50px;
+            margin: 0 auto 14px auto;
+            background: rgba(9, 11, 15, 0.9);
+            border: 1px solid rgba(212, 175, 55, 0.35);
+            border-radius: 25px;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: pan-y;
+        }
+
+        .slide-fill {
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, rgba(212, 175, 55, 0.18) 0%, rgba(212, 175, 55, 0.42) 100%);
+            pointer-events: none;
+        }
+
+        .slide-label {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.86rem;
+            color: var(--accent-gold-light);
+            letter-spacing: 1px;
+            pointer-events: none;
+        }
+
+        .slide-handle {
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent-gold) 0%, #b8972e 100%);
+            color: #0b0d11;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            cursor: grab;
+            box-shadow: 0 2px 12px rgba(212, 175, 55, 0.45);
+        }
+
+        .slide-handle:active {
+            cursor: grabbing;
+        }
+
+        .gate-quick-btn {
+            background: transparent;
+            border: 1px solid rgba(212, 175, 55, 0.35);
+            color: var(--accent-gold-light);
+            padding: 7px 20px;
+            border-radius: 20px;
+            font-size: 0.82rem;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: var(--transition-smooth);
+        }
+
+        .gate-quick-btn:hover {
+            background: rgba(212, 175, 55, 0.15);
+            border-color: var(--accent-gold);
+        }
+
         /* === 燈箱大圖賞析 (Lightbox Modal) === */
         .modal-backdrop {
             position: fixed;
@@ -1137,8 +1302,52 @@
             </div>
         </div>
 
+        <!-- 防機器人讀寫：偵測到自動化爬蟲或無頭瀏覽器時阻擋存取 -->
+        <div v-if="isBotBlocked" class="security-gate-card blocked">
+            <div class="security-shield-icon">
+                <svg style="width: 24px; height: 24px; fill: currentColor;" viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>
+            </div>
+            <h2 class="security-gate-title">存取受限・防機器人保護已啟動</h2>
+            <p class="security-gate-desc">
+                系統偵測到自動化腳本、爬蟲工具或異常瀏覽環境（{{ botBlockReason }}）。<br>
+                為保護藝術家著作權與典藏資料安全，本藝廊禁止任何自動化程式讀寫與擷取。
+            </p>
+        </div>
+
+        <!-- 防機器人讀寫：真人互動進場驗證（通過真人滑動或點擊驗證後才動態載入 Excel 與畫作） -->
+        <div v-else-if="!humanVerified" class="security-gate-card">
+            <div class="security-shield-icon">
+                <svg style="width: 24px; height: 24px; fill: currentColor;" viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg>
+            </div>
+            <h2 class="security-gate-title">典藏藝廊・真人參觀驗證</h2>
+            <p class="security-gate-desc">
+                為防止自動化機器人與 AI 爬蟲批次讀寫畫作資料，請向右滑動滑桿或點擊下方驗證按鈕進入藝廊。
+            </p>
+
+            <!-- 互動滑動解鎖軌 -->
+            <div 
+                ref="slideTrack"
+                class="slide-track"
+                @mousedown="startGateSlide"
+                @touchstart.passive="startGateSlide"
+            >
+                <div class="slide-fill" :style="{ width: (gateSlideProgress * 100) + '%' }"></div>
+                <div class="slide-label">{{ gateSlideProgress > 0.85 ? '驗證通過，正在開啟...' : '向右滑動解鎖藝廊典藏 →' }}</div>
+                <div 
+                    class="slide-handle"
+                    :style="{ transform: 'translateX(' + gateHandleOffset + 'px)' }"
+                >
+                    →
+                </div>
+            </div>
+
+            <button type="button" class="gate-quick-btn" @click="verifyHumanClick($event)">
+                我是真人訪客・點擊直接進入藝廊
+            </button>
+        </div>
+
         <!-- 本地檔案讀取提示 (當 file:// 協定受限時提供手動選取支援) -->
-        <div v-if="loadError" class="error-card">
+        <div v-if="humanVerified && !isBotBlocked && loadError" class="error-card">
             <h3>無法直接讀取 images.xlsx</h3>
             <p>
                 若您是直接於本機雙擊開啟 HTML 檔案，瀏覽器基於安全性限制（CORS）可能阻止存取本地 Excel。<br>
@@ -1151,7 +1360,7 @@
         </div>
 
         <!-- 藝廊控制工具列 -->
-        <section class="toolbar-wrapper" v-if="!loadError && images.length > 0">
+        <section class="toolbar-wrapper" v-if="humanVerified && !isBotBlocked && !loadError && images.length > 0">
             <!-- 搜尋框（移除 .trim 修飾符以避免干擾中文注音輸入法組字，改於 computed 內純淨處理） -->
             <div class="search-box">
                 <input 
@@ -1221,7 +1430,7 @@
         </section>
 
         <!-- 畫作網格區 -->
-        <main class="gallery-grid" :class="{ 'view-large': viewMode === 'large' }">
+        <main v-if="humanVerified && !isBotBlocked" class="gallery-grid" :class="{ 'view-large': viewMode === 'large' }">
             
             <!-- 單一畫作卡片（支援鍵盤導覽無障礙操作） -->
             <article 
@@ -1252,10 +1461,10 @@
                         <span class="skeleton-text">藝廊載入中...</span>
                     </div>
 
-                    <!-- 圖片載入失敗提示（支援點擊單張重試） -->
+                    <!-- 圖片載入失敗提示（支援點擊單張重試，隱藏真實檔案路徑防止爬蟲從 DOM 擷取） -->
                     <div v-if="failedMap[img._id]" class="load-error-overlay" @click.stop="retryLoadImage(img)">
                         <span class="load-error-text">圖片暫時無法載入</span>
-                        <span class="load-error-sub">{{ img.url }}</span>
+                        <span class="load-error-sub">典藏編號 #{{ String(index + 1).padStart(2, '0') }}</span>
                         <button type="button" class="retry-load-btn">點擊重試</button>
                     </div>
 
@@ -1328,7 +1537,7 @@
                 <canvas v-show="!modalLoading && !modalError" id="modalCanvas" class="modal-canvas"></canvas>
                 <div v-if="modalError" class="load-error-overlay" style="position: relative; width: 320px; height: 220px; border-radius: 8px; border: 1px solid var(--border-subtle);" @click.stop="retryModalImage">
                     <span class="load-error-text">無法載入大圖</span>
-                    <span class="load-error-sub">{{ currentModalItem.url }}</span>
+                    <span class="load-error-sub">{{ currentModalItem.name }}</span>
                     <button type="button" class="retry-load-btn">點擊重試</button>
                 </div>
                 <div v-show="!modalError" class="modal-shield"></div>
@@ -1381,22 +1590,33 @@
                     version: '',
                     inAppInfo: window.__IN_APP_INFO__ || { isInApp: false, appName: '', isIOS: false, isAndroid: false },
                     inAppDismissed: false,
-                    urlCopied: false
+                    urlCopied: false,
+                    // 防機器人讀寫狀態
+                    isBotBlocked: false,
+                    botBlockReason: '',
+                    humanVerified: false,
+                    gateSlideProgress: 0,
+                    gateHandleOffset: 0
                 };
             },
             created() {
-                // 將大型原生 DOM 物件、影像快取與計時器存放於非響應式屬性，避免 Vue Deep Proxy 追蹤損耗
+                // 將大型原生 DOM 物件、私有圖片路徑表、影像快取與計時器存放於非響應式屬性，避免暴露於 Vue State / DOM
+                this._privateUrlMap = Object.create(null);
                 this._imageCache = Object.create(null);
                 this._loadingPromises = Object.create(null);
                 this._loadQueue = [];
                 this._activeLoads = 0;
                 this._maxConcurrentLoads = 4;
                 this._observer = null;
+                this._domGuardObserver = null;
                 this._toastTimer = null;
                 this._scrollTicking = false;
                 this._modalRenderToken = 0;
                 this._touchStartX = 0;
                 this._touchStartY = 0;
+                this._gateSliding = false;
+                this._gateStartX = 0;
+                this._gateMaxSlide = 310;
             },
             computed: {
                 // 自動提取 Excel 中所有分類，並統計數量
@@ -1488,7 +1708,15 @@
                 // 每次進入頁面產生全新毫秒級隨機防快取參數，確保絕不讀取舊暫存
                 this.version = this.generateFreshVersion();
 
-                // 主動驗證並刷新瀏覽器 HTML 快取與 Cache Storage
+                // 1. 執行自動化爬蟲與無頭瀏覽器 (Headless / WebDriver) 環境檢測
+                if (this.detectBotEnvironment()) {
+                    return;
+                }
+
+                // 2. 啟動 DOM 防篡改寫入監控 (MutationObserver)
+                this.setupDomIntegrityGuard();
+
+                // 3. 主動驗證並刷新瀏覽器 HTML 快取與 Cache Storage
                 this.revalidateHtmlCache();
 
                 // 綁定具名全域事件處理器以便卸載時完整回收
@@ -1501,20 +1729,28 @@
                 };
                 this._onPageShow = (e) => {
                     // 若瀏覽器自上一頁/下一頁往返快取 (BFCache) 還原畫面，強制刷新版本並重新讀取最新資料
-                    if (e.persisted) {
+                    if (e.persisted && this.humanVerified && !this.isBotBlocked) {
                         this.version = this.generateFreshVersion();
                         this.loadExcel();
                     }
                 };
+                this._onGateMove = (e) => this.handleGateSlideMove(e);
+                this._onGateEnd = (e) => this.handleGateSlideEnd(e);
 
                 window.addEventListener('scroll', this.handleScroll, { passive: true });
                 window.addEventListener('keydown', this.handleKeydown);
                 window.addEventListener('contextmenu', this._onContextMenu);
                 window.addEventListener('dragstart', this._onDragStart);
                 window.addEventListener('pageshow', this._onPageShow);
+                window.addEventListener('mousemove', this._onGateMove, { passive: true });
+                window.addEventListener('mouseup', this._onGateEnd);
+                window.addEventListener('touchmove', this._onGateMove, { passive: true });
+                window.addEventListener('touchend', this._onGateEnd);
 
-                // 初始化載入 Excel 資料
-                this.loadExcel();
+                // 4. 若判斷為正常使用的標準瀏覽器，自動略過「真人參觀驗證」直接載入藝廊；僅在可疑環境下顯示手動驗證面板
+                if (this.isNormalBrowserEnvironment()) {
+                    this.unlockGalleryByHuman();
+                }
             },
             beforeUnmount() {
                 window.removeEventListener('scroll', this.handleScroll);
@@ -1522,11 +1758,171 @@
                 if (this._onContextMenu) window.removeEventListener('contextmenu', this._onContextMenu);
                 if (this._onDragStart) window.removeEventListener('dragstart', this._onDragStart);
                 if (this._onPageShow) window.removeEventListener('pageshow', this._onPageShow);
+                if (this._onGateMove) {
+                    window.removeEventListener('mousemove', this._onGateMove);
+                    window.removeEventListener('touchmove', this._onGateMove);
+                }
+                if (this._onGateEnd) {
+                    window.removeEventListener('mouseup', this._onGateEnd);
+                    window.removeEventListener('touchend', this._onGateEnd);
+                }
                 if (this._observer) this._observer.disconnect();
+                if (this._domGuardObserver) this._domGuardObserver.disconnect();
                 if (this._toastTimer) clearTimeout(this._toastTimer);
                 document.body.style.overflow = "";
             },
             methods: {
+                // === 防機器人核心 1：偵測無頭瀏覽器 (Headless)、WebDriver 與常見自動化爬蟲特徵 ===
+                detectBotEnvironment() {
+                    const ua = (navigator.userAgent || '').toLowerCase();
+                    let reason = '';
+
+                    if (navigator.webdriver === true) {
+                        reason = 'WebDriver 自動化控制特徵';
+                    } else if (
+                        window._phantom ||
+                        window.callPhantom ||
+                        window.__nightmare ||
+                        window.domAutomation ||
+                        window.domAutomationController ||
+                        window.__playwright ||
+                        window.__pw_manual ||
+                        document.__webdriver_evaluate ||
+                        document.__selenium_evaluate ||
+                        document.__fxdriver_evaluate
+                    ) {
+                        reason = '自動化測試框架注入特徵';
+                    } else if (/headlesschrome|phantomjs|slimerjs|puppeteer|playwright|selenium|cypress|python-requests|scrapy|curl\/|wget\/|go-http-client|gptbot|ccbot|claudebot|bytespider|perplexitybot|diffbot/i.test(ua)) {
+                        reason = '自動化爬蟲或 AI 擷取代理程式';
+                    }
+
+                    if (reason) {
+                        this.isBotBlocked = true;
+                        this.botBlockReason = reason;
+                        this.images = Object.freeze([]);
+                        this._privateUrlMap = Object.create(null);
+                        return true;
+                    }
+                    return false;
+                },
+
+                // === 智慧判斷是否為正常使用的瀏覽器（符合標準桌機／手機瀏覽器特徵時自動略過真人驗證面板） ===
+                isNormalBrowserEnvironment() {
+                    if (this.isBotBlocked) return false;
+                    try {
+                        const ua = navigator.userAgent || '';
+                        // 1. 具備主流瀏覽器核心標記 (Chrome / Safari / Firefox / Edge / Opera / 行動端 WebView)
+                        const hasStandardUA = /Mozilla\/5\.0/i.test(ua) && /(Chrome|CriOS|Safari|Firefox|FxiOS|Edg|OPR|Mobile)/i.test(ua);
+                        // 2. 具備正常螢幕與視窗尺寸（無頭爬蟲常為 0x0）
+                        const hasValidScreen = window.screen && window.screen.width >= 200 && window.screen.height >= 200;
+                        const hasValidViewport = window.innerWidth > 0 && window.innerHeight > 0;
+                        // 3. 具備正常語系設定（一般瀏覽器必定帶有 navigator.language）
+                        const hasLanguage = Boolean(navigator.language || (navigator.languages && navigator.languages.length > 0));
+                        // 4. 具備標準渲染與國際化 API，且非 WebDriver 控制
+                        const hasStandardApis = typeof window.requestAnimationFrame === 'function' && typeof window.Intl === 'object';
+                        const notWebdriver = navigator.webdriver !== true;
+
+                        return Boolean(hasStandardUA && hasValidScreen && hasValidViewport && hasLanguage && hasStandardApis && notWebdriver);
+                    } catch (_) {
+                        return false;
+                    }
+                },
+
+                // === 防機器人核心 2：真人互動進場驗證（檢驗原生 isTrusted 事件與滑動／點擊座標軌跡） ===
+                startGateSlide(e) {
+                    if (this.isBotBlocked || this.humanVerified) return;
+                    if (e && e.isTrusted === false) {
+                        this.blockUntrustedEvent('非真人原生觸發事件');
+                        return;
+                    }
+                    const track = this.$refs.slideTrack;
+                    if (track) {
+                        this._gateMaxSlide = Math.max(120, track.clientWidth - 48);
+                    }
+                    const clientX = (e.touches && e.touches.length) ? e.touches[0].clientX : e.clientX;
+                    this._gateSliding = true;
+                    this._gateStartX = clientX - this.gateHandleOffset;
+                },
+                handleGateSlideMove(e) {
+                    if (!this._gateSliding || this.humanVerified || this.isBotBlocked) return;
+                    if (e && e.isTrusted === false) {
+                        this._gateSliding = false;
+                        this.blockUntrustedEvent('自動化偽造滑動事件');
+                        return;
+                    }
+                    const clientX = (e.touches && e.touches.length) ? e.touches[0].clientX : e.clientX;
+                    const delta = Math.max(0, Math.min(this._gateMaxSlide, clientX - this._gateStartX));
+                    this.gateHandleOffset = delta;
+                    this.gateSlideProgress = delta / this._gateMaxSlide;
+
+                    if (this.gateSlideProgress >= 0.92) {
+                        this._gateSliding = false;
+                        this.gateHandleOffset = this._gateMaxSlide;
+                        this.gateSlideProgress = 1;
+                        this.unlockGalleryByHuman();
+                    }
+                },
+                handleGateSlideEnd() {
+                    if (!this._gateSliding) return;
+                    this._gateSliding = false;
+                    if (!this.humanVerified) {
+                        this.gateHandleOffset = 0;
+                        this.gateSlideProgress = 0;
+                    }
+                },
+                verifyHumanClick(e) {
+                    if (this.isBotBlocked || this.humanVerified) return;
+                    // 阻擋腳本透過 element.click() 或 dispatchEvent 偽造點擊 (isTrusted 為 false 或無實際座標細節)
+                    if (!e || e.isTrusted !== true || (e.detail === 0 && e.clientX === 0 && e.clientY === 0)) {
+                        this.blockUntrustedEvent('偵測到腳本模擬點擊 (Untrusted Click)');
+                        return;
+                    }
+                    if (this.detectBotEnvironment()) return;
+                    this.gateSlideProgress = 1;
+                    this.unlockGalleryByHuman();
+                },
+                unlockGalleryByHuman() {
+                    if (this.isBotBlocked || this.humanVerified) return;
+                    this.humanVerified = true;
+                    this.loadExcel();
+                },
+                blockUntrustedEvent(reason) {
+                    this.isBotBlocked = true;
+                    this.botBlockReason = reason;
+                    this.humanVerified = false;
+                    this.images = Object.freeze([]);
+                    this._privateUrlMap = Object.create(null);
+                    this._imageCache = Object.create(null);
+                },
+
+                // === 防機器人核心 3：DOM 防篡改與防惡意腳本注入監控 ===
+                setupDomIntegrityGuard() {
+                    if (typeof MutationObserver === 'undefined') return;
+                    if (this._domGuardObserver) this._domGuardObserver.disconnect();
+
+                    this._domGuardObserver = markRaw(new MutationObserver((mutations) => {
+                        for (let i = 0; i < mutations.length; i++) {
+                            const m = mutations[i];
+                            if (m.type === 'childList' && m.addedNodes && m.addedNodes.length) {
+                                for (let j = 0; j < m.addedNodes.length; j++) {
+                                    const node = m.addedNodes[j];
+                                    // 若有外部爬蟲腳本動態注入非授權 <script> 或 <iframe> 嘗試竊取資料，立即移除
+                                    if (node && node.nodeType === 1) {
+                                        const tag = (node.tagName || '').toUpperCase();
+                                        if ((tag === 'SCRIPT' && node.id !== 'gallery-app-script') || tag === 'IFRAME') {
+                                            try { node.remove(); } catch (_) {}
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }));
+
+                    this._domGuardObserver.observe(document.documentElement, {
+                        childList: true,
+                        subtree: true
+                    });
+                },
                 // === 防快取核心：每次載入皆生成唯一隨機版本戳記 ===
                 generateFreshVersion() {
                     return Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
@@ -1584,8 +1980,9 @@
                     }
                 },
 
-                // === 讀取 Excel 檔案（強制無快取請求） ===
+                // === 讀取 Excel 檔案（強制無快取請求，且須通過防機器人與真人互動驗證） ===
                 async loadExcel() {
+                    if (this.isBotBlocked || !this.humanVerified) return;
                     try {
                         const isHttp = window.location.protocol === 'http:' || window.location.protocol === 'https:';
                         const excelUrl = isHttp ? ("images.xlsx?_nc=" + this.version) : "images.xlsx";
@@ -1610,6 +2007,7 @@
                 },
                 // 手動選取本機 Excel 檔案支援
                 handleFileUpload(e) {
+                    if (this.isBotBlocked || !this.humanVerified) return;
                     const file = e.target.files[0];
                     if (!file) return;
                     const reader = new FileReader();
@@ -1624,15 +2022,17 @@
                     };
                     reader.readAsArrayBuffer(file);
                 },
-                // 解析 Excel 活頁簿資料，正規化各欄位
+                // 解析 Excel 活頁簿資料，正規化各欄位並將真實路徑隔離至私有映射表與凍結資料防寫入
                 parseWorkbook(buffer) {
+                    if (this.isBotBlocked || !this.humanVerified) return;
                     const workbook = XLSX.read(buffer, { type: "array" });
                     const sheet = workbook.Sheets[workbook.SheetNames[0]];
                     const jsonData = XLSX.utils.sheet_to_json(sheet);
 
-                    // 重設非響應式快取與響應式繪製狀態
+                    // 重設非響應式私有路徑表、快取與響應式繪製狀態
                     this.renderedMap = {};
                     this.failedMap = {};
+                    this._privateUrlMap = Object.create(null);
                     this._imageCache = Object.create(null);
                     this._loadingPromises = Object.create(null);
                     this._loadQueue = [];
@@ -1642,8 +2042,10 @@
                     const defaultFolder = (jsonData[0] && jsonData[0].__EMPTY) ? String(jsonData[0].__EMPTY).trim() : 'ArtImages';
                     const defaultExt = (jsonData[0] && jsonData[0].__EMPTY_2) ? String(jsonData[0].__EMPTY_2).trim() : 'jpg';
 
-                    // 正規化欄位映射 (自動適配 url/URL/路徑, name/名稱/title, category/分類 等)
-                    this.images = jsonData.map((item, idx) => {
+                    const parsedItems = [];
+
+                    // 正規化欄位映射 (自動適配 url/URL/路徑, name/名稱/title, Media/媒材, category/分類 等)
+                    jsonData.forEach((item, idx) => {
                         let url = String(item.url || item.URL || item.src || item['路徑'] || item['圖片路徑'] || '').trim();
 
                         // 若公式儲存格未快取結果但存在畫作編號欄位，自動組合路徑
@@ -1656,6 +2058,7 @@
 
                         // 統一將反斜線轉為正斜線
                         url = url.replace(/\\/g, '/').replace(/^\.\//, '');
+                        if (!url) return;
 
                         const name = String(item.name || item.title || item['名稱'] || item['畫作名稱'] || ('作品 ' + (idx + 1))).trim();
                         const media = String(item.Media || item.media || item.MEDIA || item['媒材'] || item['材質'] || '').trim();
@@ -1672,14 +2075,19 @@
                             else if (filename.startsWith('C')) category = '動漫創作';
                         }
 
-                        return {
+                        // 將真實圖檔路徑隔離存放於非響應式私有字典，不暴露於 Vue data 或 HTML DOM
+                        this._privateUrlMap[idx] = url;
+
+                        // 使用 Object.freeze 凍結每一筆作品物件，防止外部腳本篡改或寫入作品資料
+                        parsedItems.push(Object.freeze({
                             _id: idx,
-                            url: url,
                             name: name,
                             media: media,
                             category: category
-                        };
-                    }).filter(item => item.url && item.url !== '');
+                        }));
+                    });
+
+                    this.images = Object.freeze(parsedItems);
 
                     // DOM 更新後啟動 IntersectionObserver 延遲渲染
                     this.$nextTick(() => {
@@ -1871,6 +2279,9 @@
 
                 // === 智慧圖片載入核心：快取共用 + 請求去重 + 副檔名備援 + 異常重試 ===
                 loadImageSmart(item, highPriority = false) {
+                    if (this.isBotBlocked || !this.humanVerified) {
+                        return Promise.reject(new Error("未通過真人驗證"));
+                    }
                     if (this._imageCache[item._id]) {
                         return Promise.resolve(this._imageCache[item._id]);
                     }
@@ -1878,7 +2289,8 @@
                         return this._loadingPromises[item._id];
                     }
 
-                    const candidates = this.buildCandidateUrls(item.url);
+                    const rawUrl = this._privateUrlMap[item._id] || '';
+                    const candidates = this.buildCandidateUrls(rawUrl);
 
                     const promise = this.enqueueLoadTask(async () => {
                         // 最多進行 2 輪嘗試（第 2 輪針對網路瞬斷延遲 400ms 重試首選路徑）
@@ -1897,7 +2309,7 @@
                                 }
                             }
                         }
-                        throw new Error("所有備援路徑均無法載入圖片：" + item.url);
+                        throw new Error("所有備援路徑均無法載入圖片 (#" + item._id + ")");
                     }, highPriority).finally(() => {
                         delete this._loadingPromises[item._id];
                     });
@@ -1963,7 +2375,7 @@
                             this.failedMap[item._id] = false;
                         })
                         .catch((err) => {
-                            console.error("無法載入畫作圖片：", item.url, err);
+                            console.error("無法載入畫作圖片 (#" + item._id + ")：", err);
                             this.failedMap[item._id] = true;
                         });
                 },
@@ -2135,7 +2547,7 @@
                         })
                         .catch((err) => {
                             if (token !== this._modalRenderToken) return;
-                            console.error("無法載入燈箱畫作大圖：", item.url, err);
+                            console.error("無法載入燈箱畫作大圖 (#" + item._id + ")：", err);
                             this.modalLoading = false;
                             this.modalError = true;
                         });
@@ -2159,8 +2571,20 @@
                     }, 3500);
                 },
 
-                // 鍵盤快捷鍵
+                // 鍵盤快捷鍵與防擷取保護
                 handleKeydown(e) {
+                    const key = (e.key || '').toLowerCase();
+                    // 攔截常見網頁另存、原始碼檢視、列印與開發者擷取快捷鍵 (Ctrl+S / Ctrl+U / Ctrl+P / F12 / Ctrl+Shift+I / Ctrl+Shift+C)
+                    if (
+                        e.key === 'F12' ||
+                        ((e.ctrlKey || e.metaKey) && (key === 's' || key === 'u' || key === 'p')) ||
+                        ((e.ctrlKey || e.metaKey) && e.shiftKey && (key === 'i' || key === 'c' || key === 'j'))
+                    ) {
+                        e.preventDefault();
+                        this.triggerCopyrightToast();
+                        return;
+                    }
+
                     if (this.modalIndex !== -1) {
                         if (e.key === "Escape") this.closeModal();
                         else if (e.key === "ArrowLeft") this.prevModal();
